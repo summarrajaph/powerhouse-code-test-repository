@@ -142,3 +142,8 @@ button:hover {
 .square.capture-target:hover {
   filter: brightness(1.1);
 }
+
+/* King in check */
+.square.in-check {
+  background: radial-gradient(circle, #ff3b3b 0%, #e01e1e 45%, rgba(200, 0, 0, 0.35) 80%) !important;
+}

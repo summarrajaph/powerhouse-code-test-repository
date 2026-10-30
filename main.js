@@ -37,7 +37,7 @@
 
   function selectSquare(row, col) {
     selected = { row, col };
-    selectedMoves = Chess.generatePieceMoves(state.board, row, col);
+    selectedMoves = Chess.generateLegalMoves(state, row, col);
   }
 
   function findSelectedMove(row, col) {
@@ -101,6 +101,10 @@
   // Row 0 (rank 8) is drawn first, so White ends up at the bottom.
   function renderBoard() {
     boardEl.innerHTML = '';
+    // Only the side to move can be in check (the other side's king is always safe).
+    const checkedKing = Chess.isInCheck(state.board, state.turn)
+      ? Chess.findKing(state.board, state.turn)
+      : null;
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
         const square = document.createElement('div');
@@ -109,6 +113,10 @@
         square.dataset.row = row;
         square.dataset.col = col;
 
+        const inCheck = !!checkedKing && checkedKing.row === row && checkedKing.col === col;
+        if (inCheck) {
+          square.classList.add('in-check');
+        }
         if (selected && selected.row === row && selected.col === col) {
           square.classList.add('selected');
         }
@@ -125,7 +133,10 @@
           pieceEl.textContent = PIECE_GLYPHS[piece.type];
           square.appendChild(pieceEl);
           const colorName = piece.color === Chess.WHITE ? 'White' : 'Black';
-          square.setAttribute('aria-label', `${name}, ${colorName} ${PIECE_NAMES[piece.type]}`);
+          square.setAttribute(
+            'aria-label',
+            `${name}, ${colorName} ${PIECE_NAMES[piece.type]}${inCheck ? ', in check' : ''}`
+          );
         } else {
           square.setAttribute('aria-label', name);
         }
@@ -137,7 +148,8 @@
 
   function renderStatus() {
     const player = state.turn === Chess.WHITE ? 'White' : 'Black';
-    statusEl.textContent = `${player} to move`;
+    const check = Chess.isInCheck(state.board, state.turn);
+    statusEl.textContent = check ? `${player} to move - Check!` : `${player} to move`;
     statusEl.className = 'status ' + (state.turn === Chess.WHITE ? 'turn-white' : 'turn-black');
   }
 

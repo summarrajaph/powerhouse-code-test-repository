@@ -219,6 +219,67 @@
     return moves;
   }
 
+  // True if any piece of colour `byColor` attacks the square (row, col).
+  // Works outward from the target square, so it does not depend on move
+  // generation. Pawns attack diagonally forward only (never straight ahead),
+  // and the square itself may be empty or occupied.
+  function isSquareAttacked(board, row, col, byColor) {
+    const isAttacker = (r, c, types) => {
+      const p = getPiece(board, r, c);
+      return !!(p && p.color === byColor && types.includes(p.type));
+    };
+
+    // Pawns: a White pawn attacks upward (row - 1), so it sits one row below the target.
+    const pawnRow = byColor === WHITE ? row + 1 : row - 1;
+    if (isAttacker(pawnRow, col - 1, 'p') || isAttacker(pawnRow, col + 1, 'p')) return true;
+
+    for (const [dr, dc] of KNIGHT_OFFSETS) {
+      if (isAttacker(row + dr, col + dc, 'n')) return true;
+    }
+
+    for (const [dr, dc] of KING_OFFSETS) {
+      if (isAttacker(row + dr, col + dc, 'k')) return true;
+    }
+
+    // Sliding attackers: the first piece along each ray decides.
+    const rays = [
+      [ROOK_DIRECTIONS, 'rq'],
+      [BISHOP_DIRECTIONS, 'bq'],
+    ];
+    for (const [directions, types] of rays) {
+      for (const [dr, dc] of directions) {
+        let r = row + dr;
+        let c = col + dc;
+        while (inBounds(r, c)) {
+          const p = board[r][c];
+          if (p) {
+            if (p.color === byColor && types.includes(p.type)) return true;
+            break;
+          }
+          r += dr;
+          c += dc;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  function findKing(board, color) {
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        const p = board[row][col];
+        if (p && p.type === 'k' && p.color === color) return { row, col };
+      }
+    }
+    return null;
+  }
+
+  function isInCheck(board, color) {
+    const king = findKing(board, color);
+    return !!king && isSquareAttacked(board, king.row, king.col, opponent(color));
+  }
+
   // Returns a new state with the move played and the turn passed to the opponent.
   // The input state is not modified. `promotionType` picks the piece a pawn
   // promotes to (defaults to queen; a choice prompt is added later).
@@ -235,6 +296,27 @@
       board,
       turn: opponent(state.turn),
     };
+  }
+
+  // True if playing the move would leave the mover's own king attacked.
+  // The move is tried on a copy of the board, so pins, discovered attacks,
+  // the king walking into check and failing to answer a check are all caught.
+  function leavesKingInCheck(state, move) {
+    const mover = state.board[move.from.row][move.from.col];
+    const next = applyMove(state, move);
+    return isInCheck(next.board, mover.color);
+  }
+
+  // Fully legal moves for the piece on (row, col). Only the side to move has legal moves.
+  function generateLegalMoves(state, row, col) {
+    const piece = getPiece(state.board, row, col);
+    if (!piece || piece.color !== state.turn) return [];
+    return generatePieceMoves(state.board, row, col).filter((m) => !leavesKingInCheck(state, m));
+  }
+
+  // All legal moves for the side to move.
+  function generateAllLegalMoves(state) {
+    return generateAllMoves(state.board, state.turn).filter((m) => !leavesKingInCheck(state, m));
   }
 
   const Chess = {
@@ -259,6 +341,12 @@
     generatePieceMoves,
     generateAllMoves,
     applyMove,
+    isSquareAttacked,
+    findKing,
+    isInCheck,
+    leavesKingInCheck,
+    generateLegalMoves,
+    generateAllLegalMoves,
   };
 
   root.Chess = Chess;
