@@ -160,8 +160,10 @@
   }
 
   // Clicking anywhere outside the board clears the selection.
+  // composedPath() is recorded at dispatch time, so it still includes the board
+  // even if the board re-rendered (detaching event.target) while handling the click.
   function onDocumentClick(event) {
-    if (!boardEl.contains(event.target)) cancelSelection();
+    if (!event.composedPath().includes(boardEl)) cancelSelection();
   }
 
   function onKeyDown(event) {
