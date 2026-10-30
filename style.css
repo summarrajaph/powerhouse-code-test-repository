@@ -214,3 +214,46 @@ button:hover {
 .promotion-cancel:hover {
   background: #777;
 }
+
+/* Game over */
+.status.game-over {
+  background: #c0392b;
+  color: #fff;
+}
+
+.game-over-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 5;
+}
+
+.game-over-overlay[hidden] {
+  display: none;
+}
+
+.game-over-dialog {
+  background: #3a3a3a;
+  border-radius: 8px;
+  padding: 1.25rem 1.75rem;
+  text-align: center;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  max-width: 80%;
+}
+
+.game-over-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.game-over-text {
+  margin: 0 0 1rem;
+}
+
+.board.locked .square {
+  cursor: default;
+}

@@ -25,6 +25,9 @@
   let state = Chess.createInitialState();
   let boardEl;
   let statusEl;
+  let gameOverEl;
+  let gameOverTitleEl;
+  let gameOverTextEl;
 
   // Currently selected square as { row, col }, or null, and its candidate moves.
   let selected = null;
@@ -55,7 +58,8 @@
   }
 
   function commitMove(move, promotionType) {
-    state = Chess.applyMove(state, move, promotionType);
+    if (Chess.isGameOver(state)) return;
+    state = Chess.playMove(state, move, promotionType);
     clearSelection();
     render();
   }
@@ -69,6 +73,7 @@
   let pendingPromotion = null;
 
   function openPromotionPrompt(move) {
+    if (Chess.isGameOver(state)) return;
     pendingPromotion = move;
     const color = state.board[move.from.row][move.from.col].color;
     promotionChoicesEl.innerHTML = '';
@@ -116,8 +121,8 @@
 
   // Central click handler for a board square.
   function handleSquareClick(row, col) {
-    // The board is inert while the promotion choice is open.
-    if (pendingPromotion) return;
+    // The board is inert while the promotion choice is open or once the game is over.
+    if (pendingPromotion || Chess.isGameOver(state)) return;
     const piece = state.board[row][col];
     const move = selected ? findSelectedMove(row, col) : null;
 
@@ -168,6 +173,7 @@
   // Row 0 (rank 8) is drawn first, so White ends up at the bottom.
   function renderBoard() {
     boardEl.innerHTML = '';
+    boardEl.className = 'board' + (Chess.isGameOver(state) ? ' locked' : '');
     // Only the side to move can be in check (the other side's king is always safe).
     const checkedKing = Chess.isInCheck(state.board, state.turn)
       ? Chess.findKing(state.board, state.turn)
@@ -213,11 +219,39 @@
     }
   }
 
+  function colorName(color) {
+    return color === Chess.WHITE ? 'White' : 'Black';
+  }
+
   function renderStatus() {
-    const player = state.turn === Chess.WHITE ? 'White' : 'Black';
-    const check = Chess.isInCheck(state.board, state.turn);
-    statusEl.textContent = check ? `${player} to move - Check!` : `${player} to move`;
-    statusEl.className = 'status ' + (state.turn === Chess.WHITE ? 'turn-white' : 'turn-black');
+    if (state.status === 'checkmate') {
+      statusEl.textContent = `Checkmate! ${colorName(state.winner)} wins`;
+      statusEl.className = 'status game-over';
+    } else if (state.status === 'stalemate') {
+      statusEl.textContent = 'Stalemate - the game is a draw';
+      statusEl.className = 'status game-over';
+    } else {
+      const player = colorName(state.turn);
+      const check = Chess.isInCheck(state.board, state.turn);
+      statusEl.textContent = check ? `${player} to move - Check!` : `${player} to move`;
+      statusEl.className = 'status ' + (state.turn === Chess.WHITE ? 'turn-white' : 'turn-black');
+    }
+    renderGameOver();
+  }
+
+  // Banner over the board announcing how the game ended.
+  function renderGameOver() {
+    if (state.status === 'checkmate') {
+      gameOverTitleEl.textContent = 'Checkmate';
+      gameOverTextEl.textContent = `${colorName(state.winner)} wins. ${colorName(state.turn)} is checkmated.`;
+      gameOverEl.hidden = false;
+    } else if (state.status === 'stalemate') {
+      gameOverTitleEl.textContent = 'Stalemate';
+      gameOverTextEl.textContent = `Draw. ${colorName(state.turn)} has no legal moves but is not in check.`;
+      gameOverEl.hidden = false;
+    } else {
+      gameOverEl.hidden = true;
+    }
   }
 
   function render() {
@@ -225,6 +259,8 @@
     renderStatus();
   }
 
+  // Starts over: a fresh state (board, turn, castling rights, en passant square,
+  // game status and winner), no selection, no open prompt and no game-over banner.
   function newGame() {
     state = Chess.createInitialState();
     closePromotionPrompt();
@@ -234,6 +270,10 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     boardEl = document.getElementById('board');
+    gameOverEl = document.getElementById('game-over');
+    gameOverTitleEl = document.getElementById('game-over-title');
+    gameOverTextEl = document.getElementById('game-over-text');
+    document.getElementById('game-over-new-game').addEventListener('click', newGame);
     promotionEl = document.getElementById('promotion');
     promotionChoicesEl = document.getElementById('promotion-choices');
     promotionChoicesEl.addEventListener('click', onPromotionClick);

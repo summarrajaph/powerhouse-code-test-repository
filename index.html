@@ -15,6 +15,13 @@
     </div>
     <div class="board-wrap">
       <div id="board" class="board" aria-label="Chessboard"></div>
+      <div id="game-over" class="game-over-overlay" hidden>
+        <div class="game-over-dialog" role="alertdialog" aria-labelledby="game-over-title" aria-describedby="game-over-text">
+          <p id="game-over-title" class="game-over-title"></p>
+          <p id="game-over-text" class="game-over-text"></p>
+          <button id="game-over-new-game" type="button">New Game</button>
+        </div>
+      </div>
       <div id="promotion" class="promotion-overlay" hidden>
         <div class="promotion-dialog" role="dialog" aria-modal="true" aria-labelledby="promotion-title">
           <p id="promotion-title" class="promotion-title">Promote pawn to:</p>

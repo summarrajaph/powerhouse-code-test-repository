@@ -364,6 +364,10 @@
     return isInCheck(next.board, mover.color);
   }
 
+  function isGameOver(state) {
+    return state.status === 'checkmate' || state.status === 'stalemate';
+  }
+
   // Legal castling moves for the side to move. Requirements:
   // - the right is still held (king and that rook have never moved, rook not captured);
   // - king and rook are actually on their home squares;
@@ -419,6 +423,7 @@
 
   // Fully legal moves for the piece on (row, col). Only the side to move has legal moves.
   function generateLegalMoves(state, row, col) {
+    if (isGameOver(state)) return [];
     const piece = getPiece(state.board, row, col);
     if (!piece || piece.color !== state.turn) return [];
     const moves = generatePieceMoves(state.board, row, col);
@@ -435,6 +440,29 @@
       }
     }
     return moves;
+  }
+
+  // Works out whether the game is over for the side to move:
+  // no legal moves while in check is checkmate (the other side wins),
+  // no legal moves while not in check is stalemate (a draw).
+  function evaluateGameStatus(state) {
+    if (generateAllLegalMoves(state).length > 0) {
+      return { status: 'playing', winner: null };
+    }
+    if (isInCheck(state.board, state.turn)) {
+      return { status: 'checkmate', winner: opponent(state.turn) };
+    }
+    return { status: 'stalemate', winner: null };
+  }
+
+  // Plays a move for real: applies it, then checks whether the side now to move
+  // has any legal moves. (applyMove alone skips this, as it is also used to try
+  // out moves during legality checks.)
+  function playMove(state, move, promotionType) {
+    // A finished game cannot be continued; return it unchanged.
+    if (isGameOver(state)) return state;
+    const next = applyMove(state, move, promotionType);
+    return { ...next, ...evaluateGameStatus(next) };
   }
 
   const Chess = {
@@ -468,6 +496,9 @@
     generateEnPassantMoves,
     generateLegalMoves,
     generateAllLegalMoves,
+    evaluateGameStatus,
+    isGameOver,
+    playMove,
   };
 
   root.Chess = Chess;
