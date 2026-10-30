@@ -219,6 +219,24 @@
     return moves;
   }
 
+  // Returns a new state with the move played and the turn passed to the opponent.
+  // The input state is not modified. `promotionType` picks the piece a pawn
+  // promotes to (defaults to queen; a choice prompt is added later).
+  function applyMove(state, move, promotionType) {
+    const board = cloneBoard(state.board);
+    const piece = board[move.from.row][move.from.col];
+    board[move.from.row][move.from.col] = null;
+    board[move.to.row][move.to.col] = move.promotion
+      ? createPiece(promotionType || 'q', piece.color)
+      : piece;
+
+    return {
+      ...state,
+      board,
+      turn: opponent(state.turn),
+    };
+  }
+
   const Chess = {
     WHITE,
     BLACK,
@@ -240,6 +258,7 @@
     capturesOwnPiece,
     generatePieceMoves,
     generateAllMoves,
+    applyMove,
   };
 
   root.Chess = Chess;

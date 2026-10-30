@@ -26,6 +26,78 @@
   let boardEl;
   let statusEl;
 
+  // Currently selected square as { row, col }, or null, and its candidate moves.
+  let selected = null;
+  let selectedMoves = [];
+
+  function clearSelection() {
+    selected = null;
+    selectedMoves = [];
+  }
+
+  function selectSquare(row, col) {
+    selected = { row, col };
+    selectedMoves = Chess.generatePieceMoves(state.board, row, col);
+  }
+
+  function findSelectedMove(row, col) {
+    return selectedMoves.find((m) => m.to.row === row && m.to.col === col) || null;
+  }
+
+  // Plays a move chosen from the highlighted destinations, then passes the turn.
+  function makeMove(move) {
+    state = Chess.applyMove(state, move);
+    clearSelection();
+    render();
+  }
+
+  // Central click handler for a board square.
+  function handleSquareClick(row, col) {
+    const piece = state.board[row][col];
+    const move = selected ? findSelectedMove(row, col) : null;
+
+    if (move) {
+      makeMove(move);
+      return;
+    }
+
+    if (piece && piece.color === state.turn) {
+      // Clicking the already-selected piece toggles the selection off.
+      if (selected && selected.row === row && selected.col === col) {
+        clearSelection();
+      } else {
+        selectSquare(row, col);
+      }
+    } else {
+      clearSelection();
+    }
+    render();
+  }
+
+  // One delegated listener on the board handles clicks on any square,
+  // including clicks that land on the piece glyph inside it.
+  function onBoardClick(event) {
+    const square = event.target.closest('.square');
+    if (!square || !boardEl.contains(square)) return;
+    handleSquareClick(Number(square.dataset.row), Number(square.dataset.col));
+  }
+
+  // Deselect without moving, re-rendering only if something was selected.
+  function cancelSelection() {
+    if (!selected) return;
+    clearSelection();
+    render();
+  }
+
+  // Clicking anywhere outside the board clears the selection.
+  function onDocumentClick(event) {
+    if (!boardEl.contains(event.target)) cancelSelection();
+  }
+
+  function onKeyDown(event) {
+    if (event.key === 'Escape') cancelSelection();
+  }
+
   // Row 0 (rank 8) is drawn first, so White ends up at the bottom.
   function renderBoard() {
     boardEl.innerHTML = '';
@@ -36,6 +108,14 @@
         square.className = 'square ' + (isLight ? 'light' : 'dark');
         square.dataset.row = row;
         square.dataset.col = col;
+
+        if (selected && selected.row === row && selected.col === col) {
+          square.classList.add('selected');
+        }
+        const target = selected ? findSelectedMove(row, col) : null;
+        if (target) {
+          square.classList.add(target.capture ? 'capture-target' : 'move-target');
+        }
 
         const name = Chess.squareName(row, col);
         const piece = state.board[row][col];
@@ -68,11 +148,15 @@
 
   function newGame() {
     state = Chess.createInitialState();
+    clearSelection();
     render();
   }
 
   document.addEventListener('DOMContentLoaded', () => {
     boardEl = document.getElementById('board');
+    boardEl.addEventListener('click', onBoardClick);
+    document.addEventListener('click', onDocumentClick);
+    document.addEventListener('keydown', onKeyDown);
     statusEl = document.getElementById('status');
     document.getElementById('new-game').addEventListener('click', newGame);
     render();
