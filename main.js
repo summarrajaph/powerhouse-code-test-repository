@@ -45,14 +45,79 @@
   }
 
   // Plays a move chosen from the highlighted destinations, then passes the turn.
+  // Promotions first ask which piece the pawn should become.
   function makeMove(move) {
-    state = Chess.applyMove(state, move);
+    if (move.promotion) {
+      openPromotionPrompt(move);
+      return;
+    }
+    commitMove(move);
+  }
+
+  function commitMove(move, promotionType) {
+    state = Chess.applyMove(state, move, promotionType);
     clearSelection();
     render();
   }
 
+  // --- Promotion prompt ---------------------------------------------------
+
+  const PROMOTION_TYPES = ['q', 'r', 'b', 'n'];
+  let promotionEl;
+  let promotionChoicesEl;
+  // The promotion move waiting for a piece choice, or null when no prompt is open.
+  let pendingPromotion = null;
+
+  function openPromotionPrompt(move) {
+    pendingPromotion = move;
+    const color = state.board[move.from.row][move.from.col].color;
+    promotionChoicesEl.innerHTML = '';
+    for (const type of PROMOTION_TYPES) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'promotion-choice';
+      btn.dataset.type = type;
+      btn.setAttribute('aria-label', PIECE_NAMES[type]);
+      btn.title = PIECE_NAMES[type][0].toUpperCase() + PIECE_NAMES[type].slice(1);
+      const glyph = document.createElement('span');
+      glyph.className = 'piece ' + (color === Chess.WHITE ? 'white' : 'black');
+      glyph.textContent = PIECE_GLYPHS[type];
+      btn.appendChild(glyph);
+      promotionChoicesEl.appendChild(btn);
+    }
+    promotionEl.hidden = false;
+    const first = promotionChoicesEl.querySelector('button');
+    if (first) first.focus();
+  }
+
+  function closePromotionPrompt() {
+    pendingPromotion = null;
+    promotionEl.hidden = true;
+  }
+
+  function choosePromotion(type) {
+    if (!pendingPromotion || !PROMOTION_TYPES.includes(type)) return;
+    const move = pendingPromotion;
+    closePromotionPrompt();
+    commitMove(move, type);
+  }
+
+  // Cancelling leaves the pawn where it was, still selected, so the player can choose again.
+  function cancelPromotion() {
+    if (!pendingPromotion) return;
+    closePromotionPrompt();
+    render();
+  }
+
+  function onPromotionClick(event) {
+    const btn = event.target.closest('.promotion-choice');
+    if (btn) choosePromotion(btn.dataset.type);
+  }
+
   // Central click handler for a board square.
   function handleSquareClick(row, col) {
+    // The board is inert while the promotion choice is open.
+    if (pendingPromotion) return;
     const piece = state.board[row][col];
     const move = selected ? findSelectedMove(row, col) : null;
 
@@ -84,7 +149,7 @@
 
   // Deselect without moving, re-rendering only if something was selected.
   function cancelSelection() {
-    if (!selected) return;
+    if (!selected || pendingPromotion) return;
     clearSelection();
     render();
   }
@@ -95,7 +160,9 @@
   }
 
   function onKeyDown(event) {
-    if (event.key === 'Escape') cancelSelection();
+    if (event.key !== 'Escape') return;
+    if (pendingPromotion) cancelPromotion();
+    else cancelSelection();
   }
 
   // Row 0 (rank 8) is drawn first, so White ends up at the bottom.
@@ -160,12 +227,19 @@
 
   function newGame() {
     state = Chess.createInitialState();
+    closePromotionPrompt();
     clearSelection();
     render();
   }
 
   document.addEventListener('DOMContentLoaded', () => {
     boardEl = document.getElementById('board');
+    promotionEl = document.getElementById('promotion');
+    promotionChoicesEl = document.getElementById('promotion-choices');
+    promotionChoicesEl.addEventListener('click', onPromotionClick);
+    document.getElementById('promotion-cancel').addEventListener('click', cancelPromotion);
+    // Keep prompt clicks from reaching the document "click outside clears selection" handler.
+    promotionEl.addEventListener('click', (event) => event.stopPropagation());
     boardEl.addEventListener('click', onBoardClick);
     document.addEventListener('click', onDocumentClick);
     document.addEventListener('keydown', onKeyDown);

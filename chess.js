@@ -291,11 +291,68 @@
       ? createPiece(promotionType || 'q', piece.color)
       : piece;
 
+    // En passant: the captured pawn sits beside the mover, not on the destination square.
+    if (move.enPassant) {
+      board[move.from.row][move.to.col] = null;
+    }
+
+    // Castling: the king has moved two squares; bring the rook to the square it crossed.
+    if (move.castle) {
+      const row = move.from.row;
+      const rookFrom = move.castle === 'kingSide' ? 7 : 0;
+      const rookTo = move.castle === 'kingSide' ? 5 : 3;
+      board[row][rookTo] = board[row][rookFrom];
+      board[row][rookFrom] = null;
+    }
+
     return {
       ...state,
       board,
       turn: opponent(state.turn),
+      castling: updateCastlingRights(state.castling, piece, move),
+      // After a double step, the square the pawn skipped over may be captured onto
+      // en passant by the opponent's very next move only; any other move clears it.
+      enPassant: move.doublePawnPush
+        ? { row: (move.from.row + move.to.row) / 2, col: move.from.col }
+        : null,
     };
+  }
+
+  // Home squares of the rooks, keyed by colour and side.
+  const ROOK_HOMES = {
+    w: { queenSide: { row: 7, col: 0 }, kingSide: { row: 7, col: 7 } },
+    b: { queenSide: { row: 0, col: 0 }, kingSide: { row: 0, col: 7 } },
+  };
+
+  function cloneCastling(castling) {
+    return {
+      w: { ...castling.w },
+      b: { ...castling.b },
+    };
+  }
+
+  // Castling rights after a move: a side loses both rights once its king moves,
+  // and loses one right once that rook leaves its home square or is captured on it.
+  // Rights are never regained, so they double as a "has moved" record.
+  function updateCastlingRights(castling, piece, move) {
+    const rights = cloneCastling(castling);
+
+    if (piece.type === 'k') {
+      rights[piece.color].kingSide = false;
+      rights[piece.color].queenSide = false;
+    }
+
+    for (const color of [WHITE, BLACK]) {
+      for (const side of ['kingSide', 'queenSide']) {
+        const home = ROOK_HOMES[color][side];
+        const touched =
+          (move.from.row === home.row && move.from.col === home.col) ||
+          (move.to.row === home.row && move.to.col === home.col);
+        if (touched) rights[color][side] = false;
+      }
+    }
+
+    return rights;
   }
 
   // True if playing the move would leave the mover's own king attacked.
@@ -307,16 +364,77 @@
     return isInCheck(next.board, mover.color);
   }
 
+  // Legal castling moves for the side to move. Requirements:
+  // - the right is still held (king and that rook have never moved, rook not captured);
+  // - king and rook are actually on their home squares;
+  // - every square between them is empty;
+  // - the king is not in check, and neither the square it crosses nor the one
+  //   it lands on is attacked.
+  function generateCastlingMoves(state) {
+    const color = state.turn;
+    const board = state.board;
+    const row = color === WHITE ? 7 : 0;
+    const enemy = opponent(color);
+    const moves = [];
+
+    const king = board[row][4];
+    if (!king || king.type !== 'k' || king.color !== color) return moves;
+    if (isSquareAttacked(board, row, 4, enemy)) return moves;
+
+    const sides = [
+      { side: 'kingSide', rookCol: 7, between: [5, 6], kingPath: [5, 6], kingTo: 6 },
+      { side: 'queenSide', rookCol: 0, between: [1, 2, 3], kingPath: [3, 2], kingTo: 2 },
+    ];
+    for (const s of sides) {
+      if (!state.castling[color][s.side]) continue;
+      const rook = board[row][s.rookCol];
+      if (!rook || rook.type !== 'r' || rook.color !== color) continue;
+      if (s.between.some((c) => board[row][c])) continue;
+      if (s.kingPath.some((c) => isSquareAttacked(board, row, c, enemy))) continue;
+      moves.push(createMove(row, 4, row, s.kingTo, { castle: s.side }));
+    }
+    return moves;
+  }
+
+  // En passant captures available to the pawn on (row, col), if any. The target
+  // square is only set immediately after an opposing double step, so the capture
+  // is possible on that one move only.
+  function generateEnPassantMoves(state, row, col) {
+    const ep = state.enPassant;
+    const pawn = getPiece(state.board, row, col);
+    if (!ep || !pawn || pawn.type !== 'p' || pawn.color !== state.turn) return [];
+    const dir = pawn.color === WHITE ? -1 : 1;
+    if (ep.row !== row + dir || Math.abs(ep.col - col) !== 1) return [];
+    const victim = getPiece(state.board, row, ep.col);
+    if (!victim || victim.type !== 'p' || victim.color === pawn.color) return [];
+    return [createMove(row, col, ep.row, ep.col, { capture: true, enPassant: true })];
+  }
+
+  // Moves that depend on game history rather than just the board.
+  function generateSpecialMoves(state, row, col, piece) {
+    if (piece.type === 'k') return generateCastlingMoves(state);
+    if (piece.type === 'p') return generateEnPassantMoves(state, row, col);
+    return [];
+  }
+
   // Fully legal moves for the piece on (row, col). Only the side to move has legal moves.
   function generateLegalMoves(state, row, col) {
     const piece = getPiece(state.board, row, col);
     if (!piece || piece.color !== state.turn) return [];
-    return generatePieceMoves(state.board, row, col).filter((m) => !leavesKingInCheck(state, m));
+    const moves = generatePieceMoves(state.board, row, col);
+    moves.push(...generateSpecialMoves(state, row, col, piece));
+    return moves.filter((m) => !leavesKingInCheck(state, m));
   }
 
   // All legal moves for the side to move.
   function generateAllLegalMoves(state) {
-    return generateAllMoves(state.board, state.turn).filter((m) => !leavesKingInCheck(state, m));
+    const moves = [];
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        moves.push(...generateLegalMoves(state, row, col));
+      }
+    }
+    return moves;
   }
 
   const Chess = {
@@ -341,10 +459,13 @@
     generatePieceMoves,
     generateAllMoves,
     applyMove,
+    updateCastlingRights,
     isSquareAttacked,
     findKing,
     isInCheck,
     leavesKingInCheck,
+    generateCastlingMoves,
+    generateEnPassantMoves,
     generateLegalMoves,
     generateAllLegalMoves,
   };
